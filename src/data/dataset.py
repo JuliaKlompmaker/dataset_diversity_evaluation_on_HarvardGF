@@ -29,10 +29,10 @@ def process_morpho_mnist(split):
     else:
         labels_path = f"{RAW_DATA_DIR}/morphomnist/plain/t10k-labels-idx1-ubyte.gz"
         imgs_paths = f"{RAW_DATA_DIR}/morphomnist/plain/t10k-images-idx3-ubyte.gz"
-    
+
     #Create the folder to save the processed images and labels
     Path(f"{PROCESSED_DATA_DIR}/morphomnist/{split}").mkdir(parents=True, exist_ok=True)
-    
+
     #Load plain dataset labels
     with gzip.open(labels_path,'rb') as f:
         magic, size = struct.unpack('>II', f.read(8))
@@ -49,7 +49,7 @@ def process_morpho_mnist(split):
 
 def padchest_filter_and_process_labels():
     base_df = pd.read_csv(f'{RAW_DATA_DIR}/padchest/labels.csv',index_col=0)
-        
+
     # Excluding NaNs in the labels
     df_no_nan = base_df[~base_df["Labels"].isna()]
     # Excluding labels including the 'suboptimal study' label
@@ -66,17 +66,17 @@ def padchest_filter_and_process_labels():
     for label_list in list(df_view['Labels']):
         label_list = ast.literal_eval(label_list)
         prepped_labels = []
-        
+
         for label in label_list:
             if label != '':
                 new_label = label.strip(' ').lower()   # Stripping and lowercasing
                 prepped_labels.append(new_label)
-        
+
         # Removing label duplicates in this appending
         stripped_lowercased_labels.append(list(set(prepped_labels)))
 
     # Applying it to the preprocessed dataframe
-    df_view['Labels'] = stripped_lowercased_labels    
+    df_view['Labels'] = stripped_lowercased_labels
 
     df_view['label'] = df_view['Labels'].apply(lambda label_list: 1 if "pneumothorax" in label_list else 0)
     df_to_save = df_view.reset_index(drop=True)
@@ -87,7 +87,7 @@ def padchest_filter_and_process_labels():
 def padchest_process_images():
     #Load labels
     labels = pd.read_csv(f'{PROCESSED_DATA_DIR}/padchest/processed_labels.csv')
-    
+
     #Get images present at input_filepath
     images_path = glob.glob(f"{RAW_DATA_DIR}/padchest/**/*.png",recursive=True)
     image_names = [path.split('/')[-1] for path in images_path]
@@ -99,10 +99,10 @@ def padchest_process_images():
                 max_value = np.max(img)
                 if max_value==0:
                     print(f"Discarding {i_name}, black images")
-                    continue 
+                    continue
                 img = tf.image.resize_with_pad(img, 512, 512)
                 img = img/max_value
-                tf.keras.utils.save_img(f"{PROCESSED_DATA_DIR}/padchest/images/{i_name}", img, scale=True, data_format="channels_last")  
+                tf.keras.utils.save_img(f"{PROCESSED_DATA_DIR}/padchest/images/{i_name}", img, scale=True, data_format="channels_last")
             except Exception as e:
                 print(f"Discarding {i_name}, error {e}")
 
@@ -116,7 +116,7 @@ def train_test_split_padchest():
     train_idx, test_idx = next(train_test_split)
     train_labels = labels.iloc[train_idx].reset_index(drop=True)
     test_labels = labels.iloc[test_idx].reset_index(drop=True)
-    
+
     train_labels.to_csv(f"{PROCESSED_DATA_DIR}/padchest/train_labels.csv",sep=",")
     test_labels.to_csv(f"{PROCESSED_DATA_DIR}/padchest/test_labels.csv",sep=",")
 
@@ -131,15 +131,15 @@ def process_padchest():
     train_test_split_padchest()
 
 def process_CXR14():
-    
-    #Load CXR14 
+
+    #Load CXR14
     cxr14_annotations = pd.read_csv(f"{RAW_DATA_DIR}/CXR14/Data_Entry_2017.csv")
-    
+
     #Keep test images
     with open(f'{RAW_DATA_DIR}/CXR14/test_list.txt', 'r') as file:
         test_imgs_ids = [l.removesuffix("\n") for l in file.readlines()]
     cxr14_annotations = cxr14_annotations[cxr14_annotations["Image Index"].isin(test_imgs_ids)]
-    
+
     #Process label for pneumothorax and save the csv
     cxr14_annotations["Pneumothorax"] = cxr14_annotations["Finding Labels"].apply(lambda x:"Pneumothorax" in x)
     cxr14_annotations.to_csv(f"{PROCESSED_DATA_DIR}/CXR14/processed_labels.csv")
@@ -152,7 +152,8 @@ def process_CXR14():
         cv2.imwrite(f"{PROCESSED_DATA_DIR}/CXR14/imgs/{img_id}", normalized_image)
 
 @app.command()
-def main():
+#Change as we need to avoid a padchest doesnt exist error:
+def main(padchest: bool = False, cxr14: bool = False):
     logger.info("Processing train MorphoMNIST dataset...")
     process_morpho_mnist(split="train")
     logger.success("Processing train MorphoMNIST complete.")
@@ -161,13 +162,26 @@ def main():
     process_morpho_mnist(split="test")
     logger.success("Processing test MorphoMNIST complete.")
 
-    logger.info("Processing PadChest dataset...")
+    #Added code to avoid crash from not having downloaded padchest
+    if padchest:
+        logger.info("Processing PadChest dataset...")
+        process_padchest()
+        logger.success("Processing PadChest complete.")
+
+    if cxr14:
+        logger.info("Processing CXR14 dataset...")
+        process_CXR14()
+        logger.success("Processing CXR14 complete.")
+
+#commented out to avoid error when running without padchest
+
+"""     logger.info("Processing PadChest dataset...")
     process_padchest()
     logger.success("Processing PadChest complete.")
 
     logger.info("Processing CXR14 dataset...")
     process_CXR14()
-    logger.success("Processing PadChest complete.")
+    logger.success("Processing PadChest complete.") """
 
 if __name__ == "__main__":
     app()

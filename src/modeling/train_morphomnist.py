@@ -38,7 +38,9 @@ def training_epoch(model,criterion,optimizer,train_dataloader):
     train_loss = 0.0
     lst_labels = []
     lst_probas = []
-    for i, data in enumerate(train_dataloader, 0):
+
+    #Added tqdm to be able to track progress when running
+    for i, data in enumerate(tqdm(train_dataloader), 0):
         inputs, texts, labels, img_ids, metadata, dataset_names = data
         inputs,labels = inputs.float().to(DEVICE), torch.Tensor(labels).float().to(DEVICE)
 
@@ -51,7 +53,7 @@ def training_epoch(model,criterion,optimizer,train_dataloader):
         loss.backward()
         optimizer.step()
         train_loss += loss.item()
-        
+
         lst_labels.extend(labels.cpu().detach().numpy())
         lst_probas.extend(output_softmax.cpu().detach().numpy())
 
@@ -79,7 +81,7 @@ def valid_epoch(model,criterion,dataloader):
             output_softmax = softmax(outputs,dim=1)
             loss = criterion(output_softmax, labels.long())
             val_loss += loss.item()
-            
+
             lst_labels.extend(labels.cpu().detach().numpy())
             lst_probas.extend(output_softmax.cpu().detach().numpy())
 
@@ -93,7 +95,7 @@ def valid_epoch(model,criterion,dataloader):
 def compute_datamap_info(model,dataloader):
     model.to(DEVICE)
     model.eval()
-    
+
     lst_labels = []
     lst_probas = []
     lst_img_ids = []
@@ -102,7 +104,7 @@ def compute_datamap_info(model,dataloader):
         for i, data in enumerate(dataloader, 0):
             inputs, texts, labels, img_ids, metadata, dataset_names = data
             inputs,labels = inputs.float().to(DEVICE), torch.Tensor(labels).float().to(DEVICE)
-            
+
             # forward + backward
             outputs = model(inputs)
             output_softmax = softmax(outputs,dim=1)
@@ -120,16 +122,16 @@ def main(
     patience: int = 5,
 ):
     lst_train_datasets = {dataset.dataset_name:dataset for dataset in get_perturb_dataset()}
-    
+
     test_dataset = get_test_dataset()
     test_dataloader = DataLoader(test_dataset, batch_size=32)
-    
+
     for ds_name in lst_train_datasets:
         train_dataset = lst_train_datasets.get(ds_name)
         if not train_dataset:
             logger.error(f"Config name '{ds_name}' not matching any possible configs. List of possible configs:{lst_train_datasets.keys()}")
             return
-        
+
 
         param_message = f"TRANING INFO\nDATASET CONFIG: {ds_name}\n"
         param_message += f"NUMBER OF EPOCHS: {epochs}\n"
@@ -151,7 +153,7 @@ def main(
         else:
             X = train_dataset.labels_csv
             y = train_dataset.labels_csv["label"]
-        
+
         for i, (train_index, val_index) in enumerate(skf.split(X, y)):
             logger.info(f"Starting fold {i}")
             #Create the training and validation splits
@@ -166,17 +168,17 @@ def main(
                     d_copy_train.labels_csv = d_copy_train.labels_csv.iloc[train_index].reset_index(drop=True)
                     d_copy_train.imgs = d_copy_train.imgs[train_index]
                     lst_datasets_train.append(d_copy_train)
-                    
+
                     #Similar to training samples but for the validation split
                     d_copy_val = deepcopy(d)
                     d_copy_val.labels_csv = d_copy_val.labels_csv.iloc[val_index].reset_index(drop=True)
                     d_copy_val.imgs = d_copy_val.imgs[val_index]
                     lst_datasets_val.append(d_copy_val)
-                
+
                 #Create the ConcatDataset from the list of filtered datasets
                 train_fold = ConcatDataset(lst_datasets_train)
                 train_fold.as_tensor = train_dataset.datasets[0].as_tensor
-                
+
                 val_fold = ConcatDataset(lst_datasets_val)
                 val_fold.as_tensor = train_dataset.datasets[0].as_tensor
             else:
@@ -184,16 +186,16 @@ def main(
                 train_fold = deepcopy(train_dataset)
                 train_fold.labels_csv = train_fold.labels_csv.iloc[train_index].reset_index(drop=True)
                 train_fold.imgs = train_fold.imgs[train_index]
-                
+
                 #Same for validation split
                 val_fold = deepcopy(train_dataset)
                 val_fold.labels_csv = val_fold.labels_csv.iloc[val_index].reset_index(drop=True)
                 val_fold.imgs = val_fold.imgs[val_index]
-            
+
             #Create the Dataloaders
             train_dataloader = DataLoader(train_fold, batch_size=batch_size)
             valid_dataloader = DataLoader(val_fold, batch_size=batch_size)
-            
+
             #Instanciate the model, criterion and optimizer
             model = resnet50()
             model.fc = torch.nn.Linear(model.fc.in_features, 10)
@@ -223,9 +225,9 @@ def main(
                         }
                     else:
                         datamaps_info[sample_id]["proba_label"].append(float(lst_probas[j][int(lst_labels[j])]))
-                
+
                 pd.DataFrame.from_dict(datamaps_info, orient='index').to_csv(training_folder/f"datamaps_values_fold{i}.csv")
-                
+
                 if np.mean(aucs_val) > best_val_auc:
                     torch.save({
                         'optimizer': optimizer.state_dict(),
@@ -244,6 +246,6 @@ def main(
                 print(train_loss,val_loss)
 
             logger.success(f"Completed fold {i}")
-    
+
 if __name__ == "__main__":
     app()
