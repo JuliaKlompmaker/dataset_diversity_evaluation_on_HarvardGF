@@ -47,6 +47,32 @@ def process_morpho_mnist(split):
             labels_csvfile.write(f"\n{i}.png,{labels[i]}")
             plt.imsave(f"{PROCESSED_DATA_DIR}/morphomnist/{split}/{i}.png",img,cmap="gray")
 
+#My changes to make hardward work
+def harvardgf_build_labels(split_dir):
+    # split_dir is one of "Training", "Validation", "Test"
+    files = sorted(glob.glob(str(Path(RAW_DATA_DIR) / "dataset" / split_dir / "*.npz")))  # adjust folder name
+    rows = []
+    for f in tqdm(files):
+        z = np.load(f, allow_pickle=True)
+        row = {k: z[k].item() for k in
+               ["age", "male", "race", "hispanic", "language", "maritalstatus", "glaucoma", "md"]}
+        row["img_id"] = Path(f).name
+        row["split_dir"] = split_dir
+        row["label"] = row["glaucoma"]
+        rows.append(row)
+    df = pd.DataFrame(rows)
+    df["race_code"] = df["race"].map({"Asian": 0, "Black or African American": 1, "White or Caucasian": 2})
+    assert df["race_code"].notna().all()
+    out = Path(PROCESSED_DATA_DIR) / "harvardgf"
+    out.mkdir(parents=True, exist_ok=True)
+    df.to_csv(out / f"{split_dir.lower()}_labels.csv")
+
+def process_harvardgf():
+    for s in ["Training", "Validation", "Test"]:
+        logger.info(f"Harvard-GF labels: {s}")
+        harvardgf_build_labels(s)
+
+
 def padchest_filter_and_process_labels():
     base_df = pd.read_csv(f'{RAW_DATA_DIR}/padchest/labels.csv',index_col=0)
 
@@ -153,7 +179,7 @@ def process_CXR14():
 
 @app.command()
 #Change as we need to avoid a padchest doesnt exist error:
-def main(padchest: bool = False, cxr14: bool = False):
+def main(padchest: bool = False, cxr14: bool = False, harvardgf: bool = False):
     logger.info("Processing train MorphoMNIST dataset...")
     process_morpho_mnist(split="train")
     logger.success("Processing train MorphoMNIST complete.")
@@ -172,6 +198,12 @@ def main(padchest: bool = False, cxr14: bool = False):
         logger.info("Processing CXR14 dataset...")
         process_CXR14()
         logger.success("Processing CXR14 complete.")
+
+#My changes
+    if harvardgf:
+        logger.info("Processing HarvardGF dataset...")
+        process_harvardgf()
+        logger.success("Processing HarvardGF complete.")
 
 #commented out to avoid error when running without padchest
 

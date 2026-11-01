@@ -10,6 +10,8 @@ from src.config import PROCESSED_DATA_DIR,INTERIM_DATA_DIR
 from src.data.morphomnist_pytorch import MorphoMNISTDataset,get_thickening_datasets,get_thinning_datasets,get_perturb_dataset,get_test_dataset
 from src.morphomnist import perturb
 from src.data.padchest_pytorch import PadchestDataset,get_padchest_datasets_to_evaluate,get_padchest_test
+#my improt
+from src.data.harvardgf_pytorch import get_harvardgf_datasets_to_evaluate, get_harvardgf_test
 
 from src.data.utils import stratified_downsampling_dataset, bootstrap_resampling
 import pandas as pd
@@ -49,7 +51,7 @@ class IgnoreLabelDataset(torch.utils.data.Dataset):
 
         def __len__(self):
             return len(self.orig)
-        
+
 def inception_score(dataset, batch_size=32, resize=False, splits=1):
     """
     From https://github.com/sbarratt/inception-score-pytorch
@@ -98,7 +100,7 @@ def inception_score(dataset, batch_size=32, resize=False, splits=1):
             dataset.orig.labels_csv["inception_preds"]=preds.tolist()
     else:
         preds = np.stack(dataset.orig.labels_csv["inception_preds"].values)
-    
+
     # Now compute the mean kl-div
     split_scores = []
 
@@ -130,7 +132,7 @@ def get_inception_feature(x,resize=False):
     return x.data.cpu().numpy()
 
 def fid(dataset,reference_dataset,batch_size=32, resize=False,load_ref_stats=False):
-    
+
     dataset = IgnoreLabelDataset(dataset)
     reference_dataset = IgnoreLabelDataset(reference_dataset)
 
@@ -163,7 +165,7 @@ def fid(dataset,reference_dataset,batch_size=32, resize=False,load_ref_stats=Fal
             dataset.orig.labels_csv["inception_features"]=feat_data.tolist()
     else:
         feat_data = np.stack(dataset.orig.labels_csv["inception_features"].values)
-    
+
     mu_data = np.mean(feat_data, axis=0)
     sigma_data = np.cov(feat_data, rowvar=False)
 
@@ -185,7 +187,7 @@ def fid(dataset,reference_dataset,batch_size=32, resize=False,load_ref_stats=Fal
             mu_ref = np.load(f)
             sigma_ref = np.load(f)
 
-    #Compute the fid 
+    #Compute the fid
     mu_diff = np.sum((mu_data - mu_ref)**2.0)
     covmean = sqrtm(sigma_data.dot(sigma_ref))
 
@@ -265,14 +267,14 @@ def vendi_score(dataset,nb_resampling,feature_function):
         else:
             pixel_vs = vendi.score_dual(feature_vectors)
         lst_vendi_scores.append(pixel_vs)
-    
+
     return np.mean(lst_vendi_scores)
 
 
 def rougeL(dataset,nb_resampling):
     lst_RougeL = []
     for _ in tqdm(range(nb_resampling)):
-        #Downsample the data for computational 
+        #Downsample the data for computational
         d_downsample = stratified_downsampling_dataset(dataset)
 
         #Instantiate the rougeL scorer and get all the text from the dataset
@@ -285,18 +287,18 @@ def rougeL(dataset,nb_resampling):
             t1 = texts[i]
             for j in range(i+1,len(texts)):
                 t2 = texts[j]
-                rouge_scores.append(scorer.score(t1,t2)["rougeL"].fmeasure) 
-        
+                rouge_scores.append(scorer.score(t1,t2)["rougeL"].fmeasure)
+
         #Add the mean rougeL score of the current downsampled dataset
         lst_RougeL.append(np.mean(rouge_scores))
-    
+
     #Return the mean over all resampling
     return np.mean(lst_RougeL),np.std(lst_RougeL)
 
 
 def semantic_similarity(dataset):
     #Instantiate the model
-    model = BGEM3FlagModel('BAAI/bge-m3',  
+    model = BGEM3FlagModel('BAAI/bge-m3',
                use_fp16=True)
     #Get all texts from the dataset
     sentences = [item[1] for item in dataset]
@@ -342,7 +344,7 @@ def evaluate_datasets(lst_train_datasets,ref_dataset,res_file_path,nb_bootstrap=
         #Compute each metric on the dataset
         logger.info("Inception score")
         is_dataset = inception_score(dataset,32,True,1)[0]
-        
+
         logger.info("FID")
         fid_dataset = fid(dataset,ref_dataset,32,True,False)
 
@@ -377,7 +379,7 @@ def evaluate_datasets(lst_train_datasets,ref_dataset,res_file_path,nb_bootstrap=
         logger.info(f"Computing bootstrap metrics on {dataset}")
         for i in range(nb_bootstrap):
             d_bootstrap = bootstrap_resampling(dataset)
-            
+
             logger.info("Inception score")
             is_bootstrap = inception_score(d_bootstrap,32,True,1)[0]
 
@@ -435,23 +437,23 @@ def evaluate_datasets(lst_train_datasets,ref_dataset,res_file_path,nb_bootstrap=
     with open(res_file_path,"a+") as metrics_csvfile:
         metrics_csvfile.write(f"\ninception_score,{','.join([str(is_d) for is_d in lst_is])}")
         metrics_csvfile.write(f"\nfid,{','.join([str(fid_d) for fid_d in lst_fid])}")
-        metrics_csvfile.write(f"\nvs_pixel,{','.join([str(vs_d) for vs_d in lst_vs_pix])}")    
-        metrics_csvfile.write(f"\nvs_hog,{','.join([str(vs_d) for vs_d in lst_vs_hog])}")    
-        metrics_csvfile.write(f"\nvs_inception,{','.join([str(vs_d) for vs_d in lst_vs_inception])}")    
-        metrics_csvfile.write(f"\nrougeL,{','.join([str(rougel_d) for rougel_d in lst_rougeL])}")    
-        metrics_csvfile.write(f"\nsemantic_similarity,{','.join([str(semantic_sim_d) for semantic_sim_d in lst_semantic_similarity])}")    
-        metrics_csvfile.write(f"\nmetadata_similarity,{','.join([str(semantic_sim_d) for semantic_sim_d in lst_metadata_similarity])}")    
+        metrics_csvfile.write(f"\nvs_pixel,{','.join([str(vs_d) for vs_d in lst_vs_pix])}")
+        metrics_csvfile.write(f"\nvs_hog,{','.join([str(vs_d) for vs_d in lst_vs_hog])}")
+        metrics_csvfile.write(f"\nvs_inception,{','.join([str(vs_d) for vs_d in lst_vs_inception])}")
+        metrics_csvfile.write(f"\nrougeL,{','.join([str(rougel_d) for rougel_d in lst_rougeL])}")
+        metrics_csvfile.write(f"\nsemantic_similarity,{','.join([str(semantic_sim_d) for semantic_sim_d in lst_semantic_similarity])}")
+        metrics_csvfile.write(f"\nmetadata_similarity,{','.join([str(semantic_sim_d) for semantic_sim_d in lst_metadata_similarity])}")
 
 @app.command()
 def main(dataset:str):
     """
     Docstring for main
-    
+
     :param dataset: Name of the dataset used for the experiments. Either morpho or cxr
     :type dataset: str
     """
-    assert dataset=="morpho" or dataset=="cxr"
-    
+    assert dataset=="morpho" or dataset=="cxr" or dataset=="harvardgf"
+
     if dataset == "morpho":
         ref_dataset = get_test_dataset()
 
@@ -473,6 +475,16 @@ def main(dataset:str):
         evaluate_datasets(lst_train_datasets,ref_dataset,res_file_path,nb_bootstrap=10)
         logger.success("Done.")
         # -----------------------------------------
+
+    #My dataset
+    if dataset == "harvardgf":
+        # no text modality: replace the two text metrics with NaN placeholders
+        globals()["rougeL"] = lambda d, n: (np.nan, np.nan)
+        globals()["semantic_similarity"] = lambda d: np.nan
+        ref_dataset = get_harvardgf_test(norm)
+        lst_train_datasets = get_harvardgf_datasets_to_evaluate(norm)
+        res_file_path = INTERIM_DATA_DIR / f"diversity_metrics_harvardgf_{norm}.csv"
+        evaluate_datasets(lst_train_datasets, ref_dataset, res_file_path, nb_bootstrap=10)
 
 
 if __name__ == "__main__":
