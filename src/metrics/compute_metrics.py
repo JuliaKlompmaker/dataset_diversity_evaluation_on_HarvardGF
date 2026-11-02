@@ -445,7 +445,10 @@ def evaluate_datasets(lst_train_datasets,ref_dataset,res_file_path,nb_bootstrap=
         metrics_csvfile.write(f"\nmetadata_similarity,{','.join([str(semantic_sim_d) for semantic_sim_d in lst_metadata_similarity])}")
 
 @app.command()
-def main(dataset:str):
+def main(
+    dataset: str,
+    norm: str = "fixed",
+):
     """
     Docstring for main
 
