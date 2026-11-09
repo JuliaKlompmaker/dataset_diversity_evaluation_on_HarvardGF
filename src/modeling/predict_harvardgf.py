@@ -89,7 +89,7 @@ def main(
             pd.DataFrame.from_dict(preds_csv, orient='index').to_csv(f"{folder}/predictions_fold{fold_nb}.csv")
 
 
-        with open(PROCESSED_DATA_DIR/f"padchest_aucs.csv","a+") as perf_file:
+        with open(PROCESSED_DATA_DIR / "harvardgf_aucs.csv", "a+") as perf_file:
             perf_file.write(f"\n{model_name},{np.mean(folds_results)},{np.std(folds_results)}")
 
 
