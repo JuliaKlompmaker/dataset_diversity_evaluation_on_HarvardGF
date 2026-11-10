@@ -90,6 +90,12 @@ def main(
 
 
         with open(PROCESSED_DATA_DIR / "harvardgf_aucs.csv", "a+") as perf_file:
+
+            print(
+            f"WRITING {model_name} "
+            f"{np.mean(folds_results)} "
+            f"{np.std(folds_results)}"
+            )
             perf_file.write(f"\n{model_name},{np.mean(folds_results)},{np.std(folds_results)}")
 
 
